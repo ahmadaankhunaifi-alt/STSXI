@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ulangan Tengah Semester Bahasa Inggris Lanjutan Kelas XI - SMAN 3 Tuban</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 700px; background: white; padding: 30px; margin: auto; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .hidden { display: none; }
+        button { background: #003366; color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; }
+        button:hover { background: #002244; }
+        .question-box { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px solid #eee; }
+        .reading-text { background: #f9f9f9; padding: 15px; border-left: 4px solid #003366; margin-bottom: 15px; font-size: 14px; line-height: 1.6; white-space: pre-line; }
+        .timer-badge { background: #ffcc00; color: #333; padding: 5px 10px; border-radius: 4px; font-weight: bold; float: right; font-size: 14px; }
+        input[type="text"], select { width: 100%; padding: 10px; margin: 8px 0 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: white; font-size: 14px; }
+        label { display: block; margin: 6px 0; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Form Identitas Siswa -->
+    <div id="login-section">
+        <h2>Sumatif Tengah Semester (STS) Bahasa Inggris Lanjutan</h2>
+        <p>SMA Negeri 3 Tuban — Kelas XI</p>
+        <form id="form-identitas">
+            <label>Nama Lengkap:</label>
+            <input type="text" id="nama" required placeholder="Masukkan nama lengkap Anda">
+            
+            <label>Kelas:</label>
+            <select id="kelas" required>
+                <option value="" disabled selected>-- Pilih Kelas Anda --</option>
+                <option value="XI-A">X-A</option>
+                <option value="XI-B">X-B</option>
+                <option value="XI-C">X-C</option>
+                <option value="XI-D">X-D</option>
+                <option value="XI-E">X-E</option>
+                <option value="XI-F">X-F</option>
+                <option value="XI-G">X-G</option>
+                <option value="XI-H">X-H</option>
+            </select>
+
+            <button type="submit">Mulai Ujian</button>
+        </form>
+    </div>
+
+    <!-- Sesi Pengerjaan Soal -->
+    <div id="quiz-section" class="hidden">
+        <div>
+            <span id="progress-info" style="font-weight: bold; color: #555;"></span>
+            <span id="timer-box" class="timer-badge">Waktu: <span id="time-left">0</span>s</span>
+        </div>
+        <hr style="margin-top: 10px; margin-bottom: 20px; border: 0; border-top: 1px solid #ddd;">
+        
+        <div id="active-question-container">Memuat soal dari database...</div>
+        
+        <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+            <button id="btn-next" onclick="lanjutSoal()">Soal Selanjutnya</button>
+        </div>
+    </div>
+
+    <!-- Halaman Hasil / Selesai -->
+    <div id="result-section" class="hidden" style="text-align: center;">
+        <h2>Ujian Telah Selesai</h2>
+        <p id="hasil-skor" style="font-size: 18px; margin: 20px 0;"></p>
+        <p>Terima kasih telah mengikuti ujian dengan jujur dan disiplin.</p>
+    </div>
+</div>
+
+<script>
+    // PERHATIAN: Ganti URL di bawah ini dengan URL Web App Apps Script spreadsheet Kelas XI Anda!
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyg-j8zSdqYynclXAIJmsiqtpeQgeAqboJ1xSh4uzVL_BmxVq-wI-_tGpeX4O57CeFh-Q/exec"; 
+    
+    let allQuestions = [];
+    let currentIndex = 0;
+    let userAnswers = {}; 
+    let userData = {};
+    let timerInterval = null;
+    let timeLeft = 0;
+
+    document.getElementById('form-identitas').addEventListener('submit', function(e) {
+        e.preventDefault();
+        userData.nama = document.getElementById('nama').value;
+        userData.kelas = document.getElementById('kelas').value;
+
+        document.getElementById('login-section').classList.add('hidden');
+        document.getElementById('quiz-section').classList.remove('hidden');
+        
+        ambilSoalDariDatabase();
+    });
+
+    async function ambilSoalDariDatabase() {
+        try {
+            let response = await fetch(WEB_APP_URL);
+            allQuestions = await response.json();
+            if(allQuestions.length > 0) {
+                tampilkanSoal(currentIndex);
+            } else {
+                document.getElementById('active-question-container').innerText = "Soal belum tersedia di database.";
+            }
+        } catch (error) {
+            document.getElementById('active-question-container').innerText = "Gagal memuat soal. Periksa koneksi atau URL Web App.";
+        }
+    }
+
+    function tampilkanSoal(index) {
+        clearInterval(timerInterval);
+        if (index >= allQuestions.length) {
+            selesaiUjian();
+            return;
+        }
+
+        let q = allQuestions[index];
+        document.getElementById('progress-info').innerText = `Soal ${index + 1} dari ${allQuestions.length} (${q.kategori})`;
+        
+        // Atur Timer berdasarkan database
+        timeLeft = parseInt(q.durasi_detik) || 60;
+        document.getElementById('time-left').innerText = timeLeft;
+        startTimer();
+
+        let container = document.getElementById('active-question-container');
+        let html = '';
+
+        // Tampilkan teks bacaan jika ada
+        if (q.ada_teks && q.ada_teks.toLowerCase() === 'ya' && q.teks_bacaan) {
+            html += `<div class="reading-text">${q.teks_bacaan}</div>`;
+        }
+
+        html += `<div class="question-box">`;
+        html += `<p><b>${index + 1}. ${q.pertanyaan}</b></p>`;
+        
+        if (q.jenis_soal === 'pg_kompleks') {
+            html += `<p style="color: #d9534f; font-size: 13px; font-weight: bold;">* Pilihan Ganda Kompleks: Pilih TIGA (3) jawaban yang benar.</p>`;
+        }
+
+        ['a', 'b', 'c', 'd', 'e'].forEach(opt => {
+            if (q['opsi_' + opt]) {
+                let inputType = (q.jenis_soal === 'pg_kompleks') ? 'checkbox' : 'radio';
+                let inputName = `q_${q.id_soal}`;
+                let checked = '';
+                
+                if (userAnswers[q.id_soal]) {
+                    if (inputType === 'radio' && userAnswers[q.id_soal] === opt.toUpperCase()) checked = 'checked';
+                    if (inputType === 'checkbox' && userAnswers[q.id_soal].includes(opt.toUpperCase())) checked = 'checked';
+                }
+
+                html += `<label><input type="${inputType}" name="${inputName}" value="${opt.toUpperCase()}" ${checked} onclick="simpanJawaban('${q.id_soal}', '${q.jenis_soal}')"> ${opt.toUpperCase()}. ${q['opsi_' + opt]}</label><br>`;
+            }
+        });
+
+        html += `</div>`;
+        container.innerHTML = html;
+
+        if (index === allQuestions.length - 1) {
+            document.getElementById('btn-next').innerText = "Kirim Jawaban Akhir";
+        } else {
+            document.getElementById('btn-next').innerText = "Soal Selanjutnya";
+        }
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            document.getElementById('time-left').innerText = timeLeft;
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                alert("Waktu untuk soal ini habis! Otomatis ke soal berikutnya.");
+                lanjutSoal();
+            }
+        }, 1000);
+    }
+
+    function simpanJawaban(idSoal, jenis) {
+        let inputs = document.querySelectorAll(`input[name="q_${idSoal}"]:checked`);
+        if (jenis === 'pg_standar') {
+            if (inputs.length > 0) {
+                userAnswers[idSoal] = inputs[0].value;
+            }
+        } else if (jenis === 'pg_kompleks') {
+            let vals = [];
+            inputs.forEach(inp => vals.push(inp.value));
+            userAnswers[idSoal] = vals.sort().join(',');
+        }
+    }
+
+    function lanjutSoal() {
+        clearInterval(timerInterval);
+        currentIndex++;
+        if (currentIndex < allQuestions.length) {
+            tampilkanSoal(currentIndex);
+        } else {
+            selesaiUjian();
+        }
+    }
+
+    async function selesaiUjian() {
+        clearInterval(timerInterval);
+        if (!confirm("Apakah Anda yakin ingin mengumpulkan seluruh jawaban ujian?")) return;
+
+        let skorTotal = 0;
+        let bobotPerSoal = 100 / allQuestions.length;
+
+        allQuestions.forEach(q => {
+            let kunci = q.jawaban_benar ? q.jawaban_benar.trim().toUpperCase() : "";
+            let jawabanSiswa = userAnswers[q.id_soal] ? userAnswers[q.id_soal].trim().toUpperCase() : "";
+
+            if (q.jenis_soal === 'pg_standar') {
+                if (jawabanSiswa === kunci) {
+                    skorTotal += bobotPerSoal;
+                }
+            } else if (q.jenis_soal === 'pg_kompleks') {
+                if (jawabanSiswa === kunci) {
+                    skorTotal += bobotPerSoal;
+                }
+            }
+        });
+
+        userData.skor = Math.round(skorTotal);
+
+        document.getElementById('quiz-section').innerHTML = "<p style='text-align:center;'>Menyimpan nilai ke database, mohon tunggu...</p>";
+
+        try {
+            await fetch(WEB_APP_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(userData)
+            });
+
+            document.getElementById('quiz-section').classList.add('hidden');
+            document.getElementById('result-section').classList.remove('hidden');
+            document.getElementById('hasil-skor').innerText = `Terima kasih, ${userData.nama} (${userData.kelas}). Skor akhir Anda adalah: ${userData.skor}`;
+        } catch (error) {
+            alert("Gagal menyimpan nilai ke server.");
+        }
+    }
+</script>
+
+</body>
+</html>
